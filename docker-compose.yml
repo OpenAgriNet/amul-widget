@@ -1,0 +1,19 @@
+services:
+  widget-bff:
+    build:
+      context: services/widget-bff
+    environment:
+      WIDGET_ENVIRONMENT: development
+      WIDGET_JWT_SECRET: local-compose-secret-change-before-use
+      WIDGET_AMUL_API_BASE_URL: ${WIDGET_AMUL_API_BASE_URL:-}
+    ports:
+      - "8000:8000"
+
+  widget-web:
+    build:
+      context: .
+      dockerfile: apps/widget-web/Dockerfile
+    depends_on:
+      - widget-bff
+    ports:
+      - "8080:8080"

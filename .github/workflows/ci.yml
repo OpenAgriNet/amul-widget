@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # npm currently omits this platform-specific optional dependency when the
+      # lockfile was created on macOS (npm/cli#4828).
+      - run: npm install --no-save @tailwindcss/oxide-linux-x64-gnu@4.3.3
+      - run: npm run lint:web
+      - run: npm run test:web
+      - run: npm run build:web
+      - run: docker build -f apps/widget-web/Dockerfile -t amul-widget-web:ci .
+
+  bff:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/widget-bff
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked --dev
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run pytest
+      - run: uv run python scripts/export_openapi.py
+      - run: git diff --exit-code ../../packages/contracts/openapi.json
+      - run: docker build -t amul-widget-bff:ci .

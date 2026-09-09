@@ -1,0 +1,15 @@
+{
+  "name": "amul-widget",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/widget-web",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "build:web": "npm --workspace apps/widget-web run build",
+    "dev:web": "npm --workspace apps/widget-web run dev",
+    "lint:web": "npm --workspace apps/widget-web run lint",
+    "test:web": "npm --workspace apps/widget-web run test"
+  }
+}
