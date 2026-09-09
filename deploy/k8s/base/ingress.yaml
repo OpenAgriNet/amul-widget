@@ -1,8 +1,13 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: amul-widget
+  name: amul-widget-ingress
+  namespace: amul-prod
+  labels:
+    app.kubernetes.io/name: widget-web
+    app.kubernetes.io/part-of: amul-widget
   annotations:
+    kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
@@ -23,3 +28,38 @@ spec:
                 name: widget-web
                 port:
                   number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: amul-widget-api-ingress
+  namespace: amul-prod
+  labels:
+    app.kubernetes.io/name: widget-bff
+    app.kubernetes.io/part-of: amul-widget
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "16k"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/limit-connections: "5"
+    nginx.ingress.kubernetes.io/limit-rps: "5"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - widget.amulai.in
+      secretName: amulai-in-tls
+  rules:
+    - host: widget.amulai.in
+      http:
+        paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: widget-bff
+                port:
+                  number: 8000

@@ -2,6 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: widget-web
+  namespace: amul-prod
+  labels:
+    app.kubernetes.io/name: widget-web
+    app.kubernetes.io/part-of: amul-widget
 spec:
   replicas: 2
   selector:
@@ -11,10 +15,17 @@ spec:
     metadata:
       labels:
         app: widget-web
+        app.kubernetes.io/name: widget-web
+        app.kubernetes.io/part-of: amul-widget
     spec:
+      imagePullSecrets:
+        - name: regcred
+      nodeSelector:
+        role: backend
       containers:
         - name: widget-web
-          image: registry.prod.amulai.in/widget-web:latest
+          image: registry.prod.amulai.in/widget-web:1bd2899
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           readinessProbe:
@@ -41,6 +52,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: widget-web
+  namespace: amul-prod
+  labels:
+    app.kubernetes.io/name: widget-web
+    app.kubernetes.io/part-of: amul-widget
 spec:
   selector:
     app: widget-web

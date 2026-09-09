@@ -2,6 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: widget-bff
+  namespace: amul-prod
+  labels:
+    app.kubernetes.io/name: widget-bff
+    app.kubernetes.io/part-of: amul-widget
 spec:
   replicas: 2
   selector:
@@ -11,17 +15,24 @@ spec:
     metadata:
       labels:
         app: widget-bff
+        app.kubernetes.io/name: widget-bff
+        app.kubernetes.io/part-of: amul-widget
     spec:
+      imagePullSecrets:
+        - name: regcred
+      nodeSelector:
+        role: backend
       containers:
         - name: widget-bff
-          image: registry.prod.amulai.in/widget-bff:latest
+          image: registry.prod.amulai.in/widget-bff:1bd2899
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           env:
             - name: WIDGET_ENVIRONMENT
               value: production
             - name: WIDGET_AMUL_API_BASE_URL
-              value: https://api.prod.amulai.in
+              value: http://amul-oan-api.amul-prod.svc.cluster.local:8000
             - name: WIDGET_JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -51,6 +62,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: widget-bff
+  namespace: amul-prod
+  labels:
+    app.kubernetes.io/name: widget-bff
+    app.kubernetes.io/part-of: amul-widget
 spec:
   selector:
     app: widget-bff
