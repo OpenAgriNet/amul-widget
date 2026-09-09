@@ -20,7 +20,10 @@ jobs:
       - run: npm ci
       # npm currently omits this platform-specific optional dependency when the
       # lockfile was created on macOS (npm/cli#4828).
-      - run: npm install --no-save @tailwindcss/oxide-linux-x64-gnu@4.3.3
+      - run: >-
+          npm install --no-save
+          @oxlint/binding-linux-x64-gnu@1.82.0
+          @tailwindcss/oxide-linux-x64-gnu@4.3.3
       - run: npm run lint:web
       - run: npm run test:web
       - run: npm run build:web
