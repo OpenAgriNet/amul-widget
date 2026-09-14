@@ -33,7 +33,7 @@ spec:
         role: backend
       containers:
         - name: widget-bff
-          image: registry.prod.amulai.in/widget-bff:1bd2899
+          image: registry.prod.amulai.in/widget-bff:5c537d7
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
