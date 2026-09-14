@@ -58,9 +58,10 @@ Open the Vite development URL at:
 
 The Vite development server proxies `/api` to the BFF. Set `WIDGET_AMUL_API_BASE_URL` to enable the existing Amul advisory upstream. Without it, the BFF intentionally returns a typed `503` from the chat endpoint.
 
-The initial slice implements anonymous advisory text chat end to end. Voice capture,
-OTP elevation, persistent rate limiting and audit export are deliberately tracked as
-the next security-sensitive milestones rather than mocked in the public contract.
+The generic-advisory backend implements short-lived anonymous sessions, session-bound
+conversations, shared Redis enforcement of 10 turns per minute and one active
+generation per session, structured privacy-safe audit events, and cached upstream
+authentication. Voice capture and OTP elevation remain separate future milestones.
 
 ## Partner installation
 

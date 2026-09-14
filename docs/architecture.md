@@ -1,7 +1,7 @@
 # Amul AI Widget BFF Design
 
-Status: proposed architecture  
-Saved: 2026-09-09
+Status: generic-advisory MVP implemented; OTP phase deferred
+Saved: 2026-09-14
 
 ## Decision
 
@@ -189,6 +189,11 @@ The partner iframe must include `allow="microphone"` to delegate microphone acce
 - Farmer reads: 30 per minute per authenticated session.
 
 Audit the host, partner, pseudonymous farmer ID, session ID, granted scope, outcome, timestamp and request ID. Never log OTP values, JWTs or unredacted farmer data.
+
+The generic-advisory deployment enforces its advisory limits and generation lease in
+shared Redis, so the policy is consistent across BFF replicas. It emits structured
+audit events containing host, partner, session, outcome, duration and request ID;
+questions, answers and tokens are excluded.
 
 ## Error contract
 

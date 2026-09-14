@@ -1,4 +1,15 @@
 services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+    volumes:
+      - widget-redis-data:/data
+
   widget-bff:
     build:
       context: services/widget-bff
@@ -6,6 +17,11 @@ services:
       WIDGET_ENVIRONMENT: development
       WIDGET_JWT_SECRET: local-compose-secret-change-before-use
       WIDGET_AMUL_API_BASE_URL: ${WIDGET_AMUL_API_BASE_URL:-}
+      WIDGET_REDIS_URL: redis://redis:6379/0
+      WIDGET_REDIS_KEY_PREFIX: amul-widget-local
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
 
@@ -17,3 +33,6 @@ services:
       - widget-bff
     ports:
       - "8080:8080"
+
+volumes:
+  widget-redis-data:

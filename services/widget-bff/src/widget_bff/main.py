@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import html
 import json
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
@@ -11,6 +14,8 @@ from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, StreamingResponse
 
+from widget_bff import __version__
+from widget_bff.audit import audit_chat
 from widget_bff.chat_gateway import (
     AmulChatGateway,
     ChatGateway,
@@ -32,6 +37,15 @@ from widget_bff.security import (
     create_anonymous_token,
     decode_session_token,
 )
+from widget_bff.traffic import (
+    GenerationInProgress,
+    RateLimitExceeded,
+    TrafficControlUnavailable,
+    TrafficGuard,
+    build_traffic_guard,
+)
+
+logger = logging.getLogger("widget_bff")
 
 
 def _sse(event: str, data: dict[str, object]) -> str:
@@ -41,18 +55,26 @@ def _sse(event: str, data: dict[str, object]) -> str:
 def create_app(
     settings: Settings | None = None,
     gateway: ChatGateway | None = None,
+    traffic_guard: TrafficGuard | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     registry = HostRegistry.from_json(resolved_settings.hosts_json)
     resolved_gateway = gateway or AmulChatGateway(resolved_settings)
+    resolved_traffic_guard = traffic_guard or build_traffic_guard(resolved_settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        yield
+        try:
+            yield
+        finally:
+            await resolved_traffic_guard.close()
+            close_gateway = getattr(resolved_gateway, "close", None)
+            if close_gateway is not None:
+                await close_gateway()
 
     app = FastAPI(
         title="Amul AI Widget BFF",
-        version="0.1.0",
+        version=__version__,
         docs_url="/docs" if resolved_settings.environment != "production" else None,
         redoc_url=None,
         openapi_url=(
@@ -63,14 +85,23 @@ def create_app(
     app.state.settings = resolved_settings
     app.state.host_registry = registry
     app.state.chat_gateway = resolved_gateway
+    app.state.traffic_guard = resolved_traffic_guard
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):
-        request_id = request.headers.get("x-request-id") or str(uuid4())
+        supplied_request_id = request.headers.get("x-request-id")
+        try:
+            request_id = (
+                str(UUID(supplied_request_id)) if supplied_request_id else str(uuid4())
+            )
+        except ValueError:
+            request_id = str(uuid4())
         request.state.request_id = request_id
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Content-Type-Options"] = "nosniff"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     def active_host(host_id: str):
@@ -110,9 +141,22 @@ def create_app(
         return {
             "status": "ok",
             "service": "amul-widget-bff",
-            "version": "0.1.0",
+            "version": __version__,
             "upstream_configured": resolved_gateway.configured,
+            "traffic_control_backend": resolved_traffic_guard.backend,
         }
+
+    @app.get("/api/v1/ready", include_in_schema=False)
+    async def ready(request: Request):
+        if not resolved_gateway.configured or not await resolved_traffic_guard.ready():
+            return problem_response(
+                status=503,
+                code="dependency_unavailable",
+                title="Widget backend is not ready",
+                request_id=request.state.request_id,
+                retry_after=10,
+            )
+        return {"status": "ready"}
 
     @app.get(
         "/api/v1/hosts/{host_id}/config",
@@ -169,6 +213,16 @@ def create_app(
                 title="Insufficient scope",
                 request_id=request.state.request_id,
             )
+        if (
+            payload.conversation_id is not None
+            and payload.conversation_id != claims.sid
+        ):
+            return problem_response(
+                status=403,
+                code="invalid_conversation",
+                title="Conversation does not belong to this session",
+                request_id=request.state.request_id,
+            )
         if not resolved_gateway.configured:
             return problem_response(
                 status=503,
@@ -179,11 +233,59 @@ def create_app(
                 retry_after=30,
             )
 
+        try:
+            lease = await resolved_traffic_guard.start_turn(claims)
+        except RateLimitExceeded as exc:
+            audit_chat(
+                claims=claims,
+                request_id=request.state.request_id,
+                outcome="rate_limited",
+            )
+            return problem_response(
+                status=429,
+                code="rate_limited",
+                title="Too many advisory requests",
+                request_id=request.state.request_id,
+                retry_after=exc.retry_after,
+            )
+        except GenerationInProgress as exc:
+            audit_chat(
+                claims=claims,
+                request_id=request.state.request_id,
+                outcome="generation_in_progress",
+            )
+            return problem_response(
+                status=429,
+                code="generation_in_progress",
+                title="An advisory response is already being generated",
+                request_id=request.state.request_id,
+                retry_after=exc.retry_after,
+            )
+        except TrafficControlUnavailable:
+            logger.exception(
+                "traffic control unavailable request_id=%s",
+                request.state.request_id,
+            )
+            audit_chat(
+                claims=claims,
+                request_id=request.state.request_id,
+                outcome="traffic_control_unavailable",
+            )
+            return problem_response(
+                status=503,
+                code="dependency_unavailable",
+                title="Widget backend is temporarily unavailable",
+                request_id=request.state.request_id,
+                retry_after=10,
+            )
+
         conversation_id = payload.conversation_id or claims.sid
+        started_at = time.monotonic()
 
         async def events() -> AsyncIterator[str]:
-            yield _sse("turn.started", {"conversation_id": str(conversation_id)})
+            outcome = "completed"
             try:
+                yield _sse("turn.started", {"conversation_id": str(conversation_id)})
                 async for chunk in resolved_gateway.stream(payload, claims):
                     yield _sse("message.delta", {"text": chunk})
                 yield _sse(
@@ -193,16 +295,32 @@ def create_app(
                         "message_id": str(payload.message_id),
                     },
                 )
-            except (ChatGatewayError, httpx.HTTPError, KeyError) as exc:
+            except asyncio.CancelledError:
+                outcome = "cancelled"
+                raise
+            except (ChatGatewayError, httpx.HTTPError, KeyError):
+                outcome = "upstream_failed"
+                logger.exception(
+                    "upstream chat failed request_id=%s",
+                    request.state.request_id,
+                )
                 problem = {
                     "type": "https://widget.amulai.in/problems/upstream-failed",
                     "title": "Advisory service failed",
                     "status": 502,
                     "code": "upstream_failed",
                     "request_id": request.state.request_id,
-                    "detail": str(exc),
+                    "detail": "The advisory service could not complete the request.",
                 }
                 yield _sse("error", problem)
+            finally:
+                await resolved_traffic_guard.finish_turn(lease)
+                audit_chat(
+                    claims=claims,
+                    request_id=request.state.request_id,
+                    outcome=outcome,
+                    duration_ms=int((time.monotonic() - started_at) * 1000),
+                )
 
         return StreamingResponse(
             events(),

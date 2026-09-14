@@ -1,6 +1,6 @@
 [project]
 name = "amul-widget-bff"
-version = "0.1.0"
+version = "0.2.0"
 description = "Security and integration boundary for the embeddable Amul AI widget"
 requires-python = ">=3.10"
 dependencies = [
@@ -8,6 +8,7 @@ dependencies = [
   "httpx==0.28.1",
   "pydantic-settings==2.12.0",
   "PyJWT[crypto]==2.10.1",
+  "redis>=5.2,<7",
   "uvicorn[standard]==0.40.0",
 ]
 

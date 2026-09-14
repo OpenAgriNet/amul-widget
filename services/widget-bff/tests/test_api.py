@@ -37,6 +37,15 @@ def test_health_is_public() -> None:
     response = test_client.get("/api/v1/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.json()["traffic_control_backend"] == "memory"
+
+
+def test_ready_requires_the_upstream() -> None:
+    test_client, _ = client()
+    response = test_client.get("/api/v1/ready")
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "dependency_unavailable"
 
 
 def test_public_host_config_does_not_expose_origins_or_partner_id() -> None:
@@ -87,6 +96,30 @@ def test_chat_requires_widget_session() -> None:
     )
     assert response.status_code == 401
     assert response.json()["code"] == "invalid_session"
+
+
+def test_chat_rejects_conversation_from_another_session() -> None:
+    settings = Settings(
+        environment="test", jwt_secret="test-secret-with-enough-entropy-1234"
+    )
+    test_client = TestClient(create_app(settings, gateway=FakeChatGateway()))
+    session = issue_session(test_client)
+    response = test_client.post(
+        "/api/v1/chat/stream",
+        headers={
+            "Authorization": f"Bearer {session['access_token']}",
+            "Idempotency-Key": "eac2b3fe-bd25-4ff4-a023-cc91536005d0",
+        },
+        json={
+            "conversation_id": "e0df4aac-eeb9-46c8-bbdb-f4a8ccbe04ae",
+            "message_id": "20a8d4c2-009a-457c-ace2-bced07a4d7cc",
+            "text": "How do I prevent mastitis?",
+            "locale": "en",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "invalid_conversation"
 
 
 def test_chat_returns_typed_503_when_upstream_is_not_configured() -> None:
@@ -144,6 +177,49 @@ def test_chat_stream_uses_versioned_sse_events() -> None:
     assert "event: turn.started" in response.text
     assert 'event: message.delta\ndata: {"text":"Useful "}' in response.text
     assert "event: message.completed" in response.text
+
+
+def test_chat_enforces_per_session_turn_limit() -> None:
+    settings = Settings(
+        environment="test",
+        jwt_secret="test-secret-with-enough-entropy-1234",
+        advisory_turn_limit=1,
+    )
+    test_client = TestClient(create_app(settings, gateway=FakeChatGateway()))
+    session = issue_session(test_client)
+    headers = {
+        "Authorization": f"Bearer {session['access_token']}",
+        "Idempotency-Key": "eac2b3fe-bd25-4ff4-a023-cc91536005d0",
+    }
+    payload = {
+        "conversation_id": None,
+        "message_id": "20a8d4c2-009a-457c-ace2-bced07a4d7cc",
+        "text": "How do I prevent mastitis?",
+        "locale": "en",
+    }
+
+    assert (
+        test_client.post(
+            "/api/v1/chat/stream", headers=headers, json=payload
+        ).status_code
+        == 200
+    )
+    response = test_client.post("/api/v1/chat/stream", headers=headers, json=payload)
+
+    assert response.status_code == 429
+    assert response.json()["code"] == "rate_limited"
+    assert int(response.headers["retry-after"]) > 0
+
+
+def test_untrusted_request_id_is_replaced() -> None:
+    test_client, _ = client()
+    response = test_client.get(
+        "/api/v1/health",
+        headers={"X-Request-ID": "not-a-uuid-forged-log-line"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] != "not-a-uuid-forged-log-line"
 
 
 def test_validation_errors_use_problem_details() -> None:
