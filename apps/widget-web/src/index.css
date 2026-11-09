@@ -106,6 +106,55 @@
   @apply mr-auto border bg-card text-card-foreground shadow-xs;
 }
 
+/* Preflight strips list markers, heading sizes and table borders; restore them for answers. */
+.widget-markdown {
+  @apply flex flex-col gap-2 leading-relaxed break-words;
+}
+
+.widget-markdown :is(ul, ol) {
+  @apply flex flex-col gap-1 pl-5;
+}
+
+.widget-markdown ul {
+  @apply list-disc;
+}
+
+.widget-markdown ol {
+  @apply list-decimal;
+}
+
+.widget-markdown li > :is(ul, ol) {
+  @apply mt-1;
+}
+
+.widget-markdown :is(h1, h2, h3, h4, h5, h6) {
+  @apply font-semibold;
+}
+
+.widget-markdown :is(strong, b) {
+  @apply font-semibold;
+}
+
+.widget-markdown a {
+  @apply text-primary underline underline-offset-2;
+}
+
+.widget-markdown table {
+  @apply block max-w-full overflow-x-auto border-collapse text-xs;
+}
+
+.widget-markdown :is(th, td) {
+  @apply border px-2 py-1 text-left align-top;
+}
+
+.widget-markdown th {
+  @apply bg-muted font-semibold;
+}
+
+.widget-markdown hr {
+  @apply border-border;
+}
+
 .scrollbar-none {
   scrollbar-width: none;
 }

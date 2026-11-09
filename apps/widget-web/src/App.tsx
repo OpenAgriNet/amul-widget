@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { languageLabels, widgetCopy } from "@/copy"
 import { resolveHostId } from "@/host-id"
+import { MessageMarkdown } from "@/message-markdown"
 
 type ChatMessage = {
   id: string
@@ -188,7 +189,13 @@ function App() {
                 data-role={message.role}
                 className="widget-message max-w-[85%] rounded-2xl px-3 py-2 text-sm"
               >
-                {message.text || <LoaderCircle className="animate-spin" aria-label="Loading" />}
+                {!message.text ? (
+                  <LoaderCircle className="animate-spin" aria-label="Loading" />
+                ) : message.role === "assistant" ? (
+                  <MessageMarkdown text={message.text} />
+                ) : (
+                  message.text
+                )}
               </li>
             ))}
           </ol>
