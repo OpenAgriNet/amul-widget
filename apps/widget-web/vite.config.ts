@@ -16,6 +16,9 @@ export default defineConfig({
     },
   },
   build: {
+    // The embed's CSP allows `font-src 'self'` only, so a font inlined as a data: URI (KaTeX
+    // ships some under the default 4 kB limit) would be blocked. Fonts are always emitted as files.
+    assetsInlineLimit: (filePath) => (/\.(woff2?|ttf)$/.test(filePath) ? false : undefined),
     rollupOptions: {
       output: {
         entryFileNames: 'assets/widget-app.js',

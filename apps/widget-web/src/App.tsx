@@ -8,6 +8,7 @@ import type {
   WidgetLocale,
 } from "@openagrinet/amul-widget-contracts"
 import { getHostConfig, startAnonymousSession, streamChat, WidgetApiError } from "@/api"
+import { assistantDisplayText } from "@/chat-wire"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup } from "@/components/ui/field"
 import {
@@ -20,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { languageLabels, widgetCopy } from "@/copy"
 import { resolveHostId } from "@/host-id"
+import { cn } from "@/lib/utils"
 import { MessageMarkdown } from "@/message-markdown"
 
 type ChatMessage = {
@@ -183,21 +185,29 @@ function App() {
           </section>
         ) : (
           <ol className="mx-auto flex max-w-xl flex-col gap-3 py-4" aria-live="polite">
-            {messages.map((message) => (
-              <li
-                key={message.id}
-                data-role={message.role}
-                className="widget-message max-w-[85%] rounded-2xl px-3 py-2 text-sm"
-              >
-                {!message.text ? (
-                  <LoaderCircle className="animate-spin" aria-label="Loading" />
-                ) : message.role === "assistant" ? (
-                  <MessageMarkdown text={message.text} />
-                ) : (
-                  message.text
-                )}
-              </li>
-            ))}
+            {messages.map((message) => {
+              const text =
+                message.role === "assistant" ? assistantDisplayText(message.text) : message.text
+              return (
+                <li
+                  key={message.id}
+                  data-role={message.role}
+                  className={cn(
+                    "widget-message rounded-2xl px-3 py-2 text-sm",
+                    // As in the main chat, answers get more of the width so tables have room.
+                    message.role === "assistant" ? "max-w-[95%]" : "max-w-[85%]",
+                  )}
+                >
+                  {!text ? (
+                    <LoaderCircle className="animate-spin" aria-label="Loading" />
+                  ) : message.role === "assistant" ? (
+                    <MessageMarkdown text={text} />
+                  ) : (
+                    text
+                  )}
+                </li>
+              )
+            })}
           </ol>
         )}
       </main>
