@@ -1,8 +1,43 @@
+import { useEffect, useState } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 
 import { ChatTable, ChatTableCell, ChatTableHeaderCell } from "@/chat-table"
-import { chatRehypePlugins, chatRemarkPlugins } from "@/markdown-plugins"
+import { chatRehypePlugins, chatRemarkPlugins, mayContainMath } from "@/markdown-plugins"
 import { repairMarkdownTables } from "@/markdown-tables"
+
+type MathModule = typeof import("@/markdown-math")
+
+// The maths chunk loads once, on the first answer that needs it; a failed load is retried by the
+// next such answer. Until it arrives the answer renders with `$...$` as plain text.
+let mathModule: MathModule | null = null
+let mathLoad: Promise<MathModule> | null = null
+
+function loadMath(): Promise<MathModule> {
+  mathLoad ??= import("@/markdown-math").then(
+    (module) => (mathModule = module),
+    (error: unknown) => {
+      mathLoad = null
+      throw error
+    },
+  )
+  return mathLoad
+}
+
+function useMath(needed: boolean): MathModule | null {
+  const [math, setMath] = useState(mathModule)
+  useEffect(() => {
+    if (!needed || math) return
+    let live = true
+    loadMath().then(
+      (module) => live && setMath(module),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [needed, math])
+  return math
+}
 
 // Element styling mirrors amul-ui's CardBubble, so an answer reads the same in the widget as in
 // the main chat. Raw HTML stays off: react-markdown escapes it unless rehype-raw is added.
@@ -53,11 +88,12 @@ const components: Components = {
 }
 
 export function MessageMarkdown({ text }: { text: string }) {
+  const math = useMath(mayContainMath(text))
   return (
     <div className="leading-snug break-words">
       <ReactMarkdown
-        remarkPlugins={chatRemarkPlugins}
-        rehypePlugins={chatRehypePlugins}
+        remarkPlugins={math ? [...chatRemarkPlugins, ...math.mathRemarkPlugins] : chatRemarkPlugins}
+        rehypePlugins={math ? [...chatRehypePlugins, ...math.mathRehypePlugins] : chatRehypePlugins}
         components={components}
       >
         {repairMarkdownTables(text)}

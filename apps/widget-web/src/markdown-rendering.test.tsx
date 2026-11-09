@@ -2,15 +2,19 @@ import { renderToStaticMarkup } from "react-dom/server"
 import ReactMarkdown from "react-markdown"
 import { describe, expect, it } from "vitest"
 
+import { mathRehypePlugins, mathRemarkPlugins } from "@/markdown-math"
 import { chatRehypePlugins, chatRemarkPlugins } from "@/markdown-plugins"
 import { repairMarkdownTables } from "@/markdown-tables"
 
 // Ported from amul-ui's markdown-rendering.test.tsx so both chats are held to the same
-// behaviour. Renders through the exact plugin configuration the widget uses; inputs marked
-// "production" are taken verbatim from production chat.
+// behaviour. Renders through the exact plugin configuration the widget uses once the maths chunk
+// has loaded; inputs marked "production" are taken verbatim from production chat.
+const remarkPlugins = [...chatRemarkPlugins, ...mathRemarkPlugins]
+const rehypePlugins = [...chatRehypePlugins, ...mathRehypePlugins]
+
 function render(body: string): string {
   return renderToStaticMarkup(
-    <ReactMarkdown remarkPlugins={chatRemarkPlugins} rehypePlugins={chatRehypePlugins}>
+    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
       {repairMarkdownTables(body)}
     </ReactMarkdown>,
   )

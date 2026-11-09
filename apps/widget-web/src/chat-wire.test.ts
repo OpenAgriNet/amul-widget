@@ -16,10 +16,11 @@ describe("assistantDisplayText", () => {
     expect(assistantDisplayText(`Your card is ready.${artifactFrame()}`)).toBe("Your card is ready.")
   })
 
-  it("cuts a suggestions frame out of the text", () => {
-    expect(assistantDisplayText('Answer.__SUGGESTIONS__["a","b"]__END_SUGGESTIONS__')).toBe(
-      "Answer.",
+  it("keeps the closing markers of an answer that ends in bold or italics", () => {
+    expect(assistantDisplayText("Give **dry fodder** and __green fodder__")).toBe(
+      "Give **dry fodder** and __green fodder__",
     )
+    expect(assistantDisplayText("Keep the shed _clean_")).toBe("Keep the shed _clean_")
   })
 
   it("holds back a frame whose end marker has not arrived", () => {
